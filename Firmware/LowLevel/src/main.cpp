@@ -57,14 +57,14 @@ SerialPIO uiSerial(PIN_UI_TX, PIN_UI_RX, 250);
 /**
  * @brief Some hardware parameters
  */
-#define VIN_R1 9980.0f
-#define VIN_R2 998.0f
+#define VIN_R1 10000.0f
+#define VIN_R2 1000.0f
 #define R_SHUNT 0.003f
 #define CURRENT_SENSE_GAIN 100.0f
 
-int next_adc_offset_sample_v_charge = 0;
-float adc_offset_samples_v_charge[50] = {0};
-float adc_offset_v_charge = 0.0f;
+int next_adc_offset_sample = 0;
+float adc_offset_samples[20] = {0};
+float adc_offset = 0.0f;
 
 #define BATT_ABS_MAX 28.5f
 #define BATT_ABS_MIN 21.7f
@@ -668,33 +668,28 @@ void loop() {
     if (now - last_status_update_millis > STATUS_CYCLETIME) {
         updateNeopixel();
 
-        // Disable power saving during ADC
-        //digitalWrite(PIN_SMPS_POWERSAVE, HIGH);
         status_message.v_battery =
-            ((float)analogRead(PIN_ANALOG_BATTERY_VOLTAGE) - adc_offset_v_charge) * (3.3f / 4096.0f) * ((VIN_R1 + VIN_R2) / VIN_R2);
+            ((float)analogRead(PIN_ANALOG_BATTERY_VOLTAGE) - adc_offset) * (3.33f / 4096.0f) * ((VIN_R1 + VIN_R2) / VIN_R2);
 #ifndef IGNORE_CHARGING_CURRENT
         status_message.charging_current =
-            ((float)analogRead(PIN_ANALOG_CHARGE_CURRENT) - adc_offset_v_charge) * (3.3f / 4096.0f) / (CURRENT_SENSE_GAIN * R_SHUNT);
+            ((float)analogRead(PIN_ANALOG_CHARGE_CURRENT) - adc_offset) * (3.33f / 4096.0f) / (CURRENT_SENSE_GAIN * R_SHUNT);
 #else
         status_message.charging_current = -1.0f;
 #endif
-        status_message.v_charge = ((float)analogRead(PIN_ANALOG_CHARGE_VOLTAGE) - adc_offset_v_charge) * (3.3f / 4096.0f) * ((VIN_R1 + VIN_R2) / VIN_R2);
+        status_message.v_charge = ((float)analogRead(PIN_ANALOG_CHARGE_VOLTAGE) - adc_offset) * (3.33f / 4096.0f) * ((VIN_R1 + VIN_R2) / VIN_R2);
 
-        if( status_message.v_charge < 3.0f ) {
-            // If undocked use charge voltage to determine voltage adc offset
-            adc_offset_samples_v_charge[next_adc_offset_sample_v_charge++] = (float)analogRead(PIN_ANALOG_CHARGE_VOLTAGE);
-            next_adc_offset_sample_v_charge %= 50;
 
-            if (next_adc_offset_sample_v_charge == 0) {
-                float tmp = 0.0f;
-                for(int i=0; i<50; i++) {
-                    tmp += adc_offset_samples_v_charge[i];
-                }
-                adc_offset_v_charge = tmp / 50.0f;
+        // If mowing use charge current ADC to determine adc offset
+        if( last_high_level_state.current_mode == HighLevelMode::MODE_AUTONOMOUS && last_high_level_state.gps_quality != 0 ) {
+            adc_offset_samples[next_adc_offset_sample++] = (float)analogRead(PIN_ANALOG_CHARGE_VOLTAGE);
+            next_adc_offset_sample %= 20;
+
+            float tmp = 0.0f;
+            for(int i=0; i<20; i++) {
+                tmp += adc_offset_samples[i];
             }
+            adc_offset = tmp / 20.0f;
         }
-
-        //digitalWrite(PIN_SMPS_POWERSAVE, LOW);
 
         status_message.status_bitmask = (status_message.status_bitmask & 0b11111011) | ((charging_allowed & 0b1) << 2);
         status_message.status_bitmask = (status_message.status_bitmask & 0b11011111) | ((sound_available & 0b1) << 5);
