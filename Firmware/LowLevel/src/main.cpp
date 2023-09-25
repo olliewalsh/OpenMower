@@ -31,9 +31,8 @@
 #define STATUS_CYCLETIME 100      // cycletime for refresh analog and digital Statusvalues
 #define UI_SET_LED_CYCLETIME 1000 // cycletime for refresh UI status LEDs
 
-#define TILT_EMERGENCY_MILLIS 2500  // Time for a single wheel to be lifted in order to count as emergency. This is to filter uneven ground.
-#define LIFT_EMERGENCY_MILLIS 100  // Time for both wheels to be lifted in order to count as emergency. This is to filter uneven ground.
-#define BUTTON_EMERGENCY_MILLIS 20 // Time for button emergency to activate. This is to debounce the button if triggered on bumpy surfaces
+#define TILT_EMERGENCY_MILLIS 0  // Time for a single wheel to be lifted in order to count as emergency. This is to filter uneven ground.
+#define LIFT_EMERGENCY_MILLIS 0  // Time for both wheels to be lifted in order to count as emergency. This is to filter uneven ground.
 
 // Define to stream debugging messages via USB
 // #define USB_DEBUG
@@ -88,7 +87,6 @@ unsigned long last_UILED_millis = 0;
 
 unsigned long lift_emergency_started = 0;
 unsigned long tilt_emergency_started = 0;
-unsigned long button_emergency_started = 0;
 
 // Stock UI
 uint8_t stock_ui_emergency_state = 0; // Get set by received Get_Emergency packet
@@ -107,6 +105,8 @@ struct msg_set_leds leds_message = {0};
 // We can lock it during message transmission to prevent core1 to modify data in this time.
 auto_init_mutex(mtx_status_message);
 
+auto_init_mutex(mtx_stop_pressed);
+bool stop_pressed = false;
 bool emergency_latch = true;
 bool sound_available = false;
 bool charging_allowed = false;
@@ -145,7 +145,9 @@ void updateEmergency() {
 
     bool is_tilted = emergency1 || emergency2;
     bool is_lifted = emergency1 && emergency2;
-    bool stop_pressed = emergency3 || emergency4;
+    mutex_enter_blocking(&mtx_stop_pressed);
+    bool local_stop_pressed = stop_pressed;
+    mutex_exit(&mtx_stop_pressed);
 
     if (is_lifted) {
         // We just lifted, store the timestamp
@@ -157,17 +159,7 @@ void updateEmergency() {
         lift_emergency_started = 0;
     }
 
-    if (stop_pressed) {
-        // We just pressed, store the timestamp
-        if (button_emergency_started == 0) {
-            button_emergency_started = millis();
-        }
-    } else {
-        // Not pressed, reset the time
-        button_emergency_started = 0;
-    }
-
-    if (lift_emergency_started > 0 && (millis() - lift_emergency_started) >= LIFT_EMERGENCY_MILLIS) {
+    if (LIFT_EMERGENCY_MILLIS && lift_emergency_started > 0 && (millis() - lift_emergency_started) >= LIFT_EMERGENCY_MILLIS) {
         // Emergency bit 2 (lift wheel 1)set?
         if (emergency1)
             emergency_state |= 0b01000;
@@ -186,7 +178,7 @@ void updateEmergency() {
         tilt_emergency_started = 0;
     }
 
- if (tilt_emergency_started > 0 && (millis() - tilt_emergency_started) >= TILT_EMERGENCY_MILLIS) {
+ if (TILT_EMERGENCY_MILLIS && tilt_emergency_started > 0 && (millis() - tilt_emergency_started) >= TILT_EMERGENCY_MILLIS) {
         // Emergency bit 2 (lift wheel 1)set?
         if (emergency1)
             emergency_state |= 0b01000;
@@ -194,13 +186,8 @@ void updateEmergency() {
         if (emergency2)
             emergency_state |= 0b10000;
     }
-    if (button_emergency_started > 0 && (millis() - button_emergency_started) >= BUTTON_EMERGENCY_MILLIS) {
-        // Emergency bit 2 (stop button) set?
-        if (emergency3)
-            emergency_state |= 0b00010;
-        // Emergency bit 1 (stop button)set?
-        if (emergency4)
-            emergency_state |= 0b00100;
+    if (local_stop_pressed) {
+        emergency_state |= 0b00110;
     }
 
     if (emergency_state || emergency_latch) {
@@ -314,6 +301,7 @@ void setup1() {
 }
 
 void loop1() {
+    bool local_stop_pressed = false;
     // Loop through the mux and query actions. Store the result in the multicore fifo
     for (uint8_t mux_address = 0; mux_address < 7; mux_address++) {
         gpio_put_masked(0b111 << 13, mux_address << 13);
@@ -321,6 +309,20 @@ void loop1() {
         bool state = gpio_get(PIN_MUX_IN);
 
         switch (mux_address) {
+            // Use USS ECHO pins for STOP buttons on SA650ECO
+            // STOP buttons are NC switches
+            // Pull-up ECHO to 5v, switch ECHO to GND
+            // OR the first 3 values in a thread local var, for the 4th OR it and set the global var
+            case 0:
+            case 1:
+            case 2:
+                local_stop_pressed |= state;
+                break;
+            case 3:
+                mutex_enter_blocking(&mtx_stop_pressed);
+                stop_pressed = local_stop_pressed | state;
+                mutex_exit(&mtx_stop_pressed);
+                break;
             case 5:
                 mutex_enter_blocking(&mtx_status_message);
 
@@ -362,7 +364,6 @@ void setup() {
     ROS_running = false;
 
     lift_emergency_started = 0;
-    button_emergency_started = 0;
     // Initialize messages
     imu_message = {0};
     status_message = {0};
@@ -530,7 +531,7 @@ void onPacketReceived(const uint8_t *buffer, size_t size) {
 
 // returns true, if it's a good idea to charge the battery (current, voltages, ...)
 bool checkShouldCharge() {
-    return status_message.v_charge < 30.0 && status_message.charging_current < 1.5 && status_message.v_battery < 29.0;
+    return status_message.v_charge < 30.0 && status_message.charging_current < 2.0 && status_message.v_battery < 29.0;
 }
 
 void updateChargingEnabled() {
@@ -558,7 +559,7 @@ void updateChargingEnabled() {
 void updateNeopixel() {
     led_blink_counter++;
     // flash red on emergencies
-    if (emergency_latch && led_blink_counter & 0b10) {
+    if ((emergency_latch) && led_blink_counter & 0b10) {
         p.neoPixelSetValue(0, 128, 0, 0, true);
     } else {
         if (ROS_running) {
