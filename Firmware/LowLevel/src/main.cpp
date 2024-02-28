@@ -663,9 +663,9 @@ void loop() {
         status_message.v_charge = ((float)analogRead(PIN_ANALOG_CHARGE_VOLTAGE) - adc_offset) * (3.33f / 4096.0f) * ((VIN_R1 + VIN_R2) / VIN_R2);
 
 
-        // If undocked use charge current ADC to determine adc offset
+        // If undocked use charge voltage ADC to determine adc offset
         if( status_message.v_charge < 3.0f ) {
-            adc_offset_samples[next_adc_offset_sample++] = (float)analogRead(PIN_ANALOG_CHARGE_CURRENT);
+            adc_offset_samples[next_adc_offset_sample++] = (float)analogRead(PIN_ANALOG_CHARGE_VOLTAGE);
             next_adc_offset_sample %= 20;
 
             float tmp = 0.0f;
