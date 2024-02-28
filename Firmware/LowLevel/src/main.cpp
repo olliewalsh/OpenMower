@@ -68,10 +68,13 @@ float adc_offset_samples[20] = {0};
 float adc_offset = 0.0f;
 
 #define BATT_ABS_MAX 28.7f
-#define BATT_ABS_Min 21.7f
+#define BATT_ABS_MIN 21.7f
+#define BATT_TOPUP_RANGE 0.5f
+#define BATT_CHARGE_OVERCURRENT 2.0f
+#define BATT_CHARGE_OVERVOLTAGE 30.0f
 
 #define BATT_FULL BATT_ABS_MAX - 0.3f
-#define BATT_EMPTY BATT_ABS_Min + 0.3f
+#define BATT_EMPTY BATT_ABS_MIN + 0.3f
 
 // Emergency will be engaged, if no heartbeat was received in this time frame.
 #define HEARTBEAT_MILLIS 500
@@ -119,6 +122,7 @@ auto_init_mutex(mtx_status_message);
 bool emergency_latch = true;
 bool sound_available = false;
 bool charging_allowed = false;
+bool charging_paused = false;
 bool ROS_running = false;
 unsigned long charging_disabled_time = 0;
 
@@ -564,10 +568,20 @@ void onPacketReceived(const uint8_t *buffer, size_t size) {
 
 // returns true, if it's a good idea to charge the battery (current, voltages, ...)
 bool checkShouldCharge() {
-    return status_message.v_charge < 30.0 && status_message.charging_current < 1.5 && status_message.v_battery < 29.0;
+    if(charging_paused && status_message.v_battery < BATT_ABS_MAX - BATT_TOPUP_RANGE) {
+        charging_paused = false;
+    }
+    if(status_message.v_battery >= BATT_ABS_MAX) {
+        charging_paused = true;
+    }
+    return !charging_paused && status_message.v_charge < BATT_CHARGE_OVERVOLTAGE && status_message.charging_current < BATT_CHARGE_OVERCURRENT && status_message.v_battery < BATT_ABS_MAX;
 }
 
 void updateChargingEnabled() {
+    // Reset topup mode when undocked
+    if (status_message.v_charge < 3.0f) {
+        charging_paused = false;
+    }
     if (charging_allowed) {
         if (!checkShouldCharge()) {
             digitalWrite(PIN_ENABLE_CHARGE, LOW);
