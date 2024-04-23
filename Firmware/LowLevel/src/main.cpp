@@ -33,8 +33,8 @@
 #define UI_GET_VERSION_CYCLETIME 5000 // cycletime for UI Get_Version request (UI available check)
 #define UI_GET_VERSION_TIMEOUT 100    // timeout for UI Get_Version response (UI available check)
 
-#define TILT_EMERGENCY_MILLIS 0  // Time for a single wheel to be lifted in order to count as emergency. This is to filter uneven ground.
-#define LIFT_EMERGENCY_MILLIS 0  // Time for both wheels to be lifted in order to count as emergency. This is to filter uneven ground.
+#define TILT_EMERGENCY_MILLIS 500  // Time for a single wheel to be lifted in order to count as emergency. This is to filter uneven ground.
+#define LIFT_EMERGENCY_MILLIS 100  // Time for both wheels to be lifted in order to count as emergency. This is to filter uneven ground.
 
 // Define to stream debugging messages via USB
 // #define USB_DEBUG
@@ -62,17 +62,18 @@ SerialPIO uiSerial(PIN_UI_TX, PIN_UI_RX, 250);
 #define R_SHUNT 0.003f
 #define CURRENT_SENSE_GAIN 100.0f
 
-int next_adc_offset_sample = 0;
-float adc_offset_samples[20] = {0};
-float adc_offset = 0.0f;
+int next_adc_offset_sample_v_charge = 0;
+float adc_offset_samples_v_charge[50] = {0};
+float adc_offset_v_charge = 0.0f;
 
-#define BATT_ABS_MAX 28.7f
+#define BATT_ABS_MAX 28.5f
 #define BATT_ABS_MIN 21.7f
+// Ensure this is greater than than voltage jump when enabling charging or it will flap
 #define BATT_TOPUP_RANGE 0.5f
-#define BATT_CHARGE_OVERCURRENT 2.0f
+#define BATT_CHARGE_OVERCURRENT 5.8f
 #define BATT_CHARGE_OVERVOLTAGE 30.0f
 
-#define BATT_FULL 27.75f
+#define BATT_FULL 28.0f
 #define BATT_EMPTY 22.6f
 
 // Emergency will be engaged, if no heartbeat was received in this time frame.
@@ -148,12 +149,13 @@ void updateEmergency() {
         ROS_running = false;
     }
     uint8_t last_emergency = status_message.emergency_bitmask & 1;
+    bool dispatch_emergency = false;
 
-    // Mask the emergency bits. 2x Lift sensor, 2x Emergency Button
-    bool emergency1 = !gpio_get(PIN_EMERGENCY_1) | (stock_ui_emergency_state & Emergency_state::Emergency_lift1);
-    bool emergency2 = !gpio_get(PIN_EMERGENCY_2) | (stock_ui_emergency_state & Emergency_state::Emergency_lift2);
-    bool emergency3 = !gpio_get(PIN_EMERGENCY_3) | (stock_ui_emergency_state & Emergency_state::Emergency_stop1);
-    bool emergency4 = !gpio_get(PIN_EMERGENCY_4) | (stock_ui_emergency_state & Emergency_state::Emergency_stop2);
+    // Mask the emergency bits. 2x Lift sensor, 2x Bump sensor
+    bool emergency1 = !gpio_get(PIN_EMERGENCY_1);
+    bool emergency2 = !gpio_get(PIN_EMERGENCY_2);
+    bool emergency3 = gpio_get(PIN_EMERGENCY_3);
+    bool emergency4 = gpio_get(PIN_EMERGENCY_4);
 
     uint8_t emergency_state = 0;
 
@@ -192,7 +194,7 @@ void updateEmergency() {
         tilt_emergency_started = 0;
     }
 
- if (TILT_EMERGENCY_MILLIS && tilt_emergency_started > 0 && (millis() - tilt_emergency_started) >= TILT_EMERGENCY_MILLIS) {
+    if (TILT_EMERGENCY_MILLIS && tilt_emergency_started > 0 && (millis() - tilt_emergency_started) >= TILT_EMERGENCY_MILLIS) {
         // Emergency bit 2 (lift wheel 1)set?
         if (emergency1)
             emergency_state |= 0b01000;
@@ -207,12 +209,27 @@ void updateEmergency() {
     if (emergency_state || emergency_latch) {
         emergency_latch |= 1;
         emergency_state |= 1;
+        dispatch_emergency = last_emergency != (emergency_state & 1);
+    } else {
+        // Use emergency bits to indicate bump when first bit is not set
+        // if(emergency3)
+        //     emergency_state |= 0b10;
+        // if(emergency4)
+        //     emergency_state |= 0b100;
+        // if(emergency_state != status_message.emergency_bitmask) {
+        //     dispatch_emergency = true;
+        // }
     }
+
+    status_message.uss_ranges_m[0] = emergency1;
+    status_message.uss_ranges_m[1] = emergency2;
+    status_message.uss_ranges_m[2] = emergency3;
+    status_message.uss_ranges_m[3] = emergency4;
 
     status_message.emergency_bitmask = emergency_state;
 
     // If it's a new emergency, instantly send the message. This is to not spam the channel during emergencies.
-    if (last_emergency != (emergency_state & 1)) {
+    if (dispatch_emergency) {
         sendMessage(&status_message, sizeof(struct ll_status));
 
         // Update LEDs instantly
@@ -571,20 +588,19 @@ void onPacketReceived(const uint8_t *buffer, size_t size) {
 
 // returns true, if it's a good idea to charge the battery (current, voltages, ...)
 bool checkShouldCharge() {
-    if(charging_paused && status_message.v_battery < BATT_ABS_MAX - BATT_TOPUP_RANGE) {
+    if(charging_paused && status_message.v_battery < (BATT_ABS_MAX - BATT_TOPUP_RANGE)) {
         charging_paused = false;
     }
     if(status_message.v_battery >= BATT_ABS_MAX) {
         charging_paused = true;
     }
-    return !charging_paused && status_message.v_charge < BATT_CHARGE_OVERVOLTAGE && status_message.charging_current < BATT_CHARGE_OVERCURRENT && status_message.v_battery < BATT_ABS_MAX;
+    return !charging_paused &&
+        status_message.v_charge > 3.0f &&
+        status_message.v_charge < BATT_CHARGE_OVERVOLTAGE &&
+        status_message.charging_current < BATT_CHARGE_OVERCURRENT;
 }
 
 void updateChargingEnabled() {
-    // Reset topup mode when undocked
-    if (status_message.v_charge < 3.0f) {
-        charging_paused = false;
-    }
     if (charging_allowed) {
         if (!checkShouldCharge()) {
             digitalWrite(PIN_ENABLE_CHARGE, LOW);
@@ -653,30 +669,32 @@ void loop() {
         updateNeopixel();
 
         // Disable power saving during ADC
-        digitalWrite(PIN_SMPS_POWERSAVE, HIGH);
+        //digitalWrite(PIN_SMPS_POWERSAVE, HIGH);
         status_message.v_battery =
-            ((float)analogRead(PIN_ANALOG_BATTERY_VOLTAGE) - adc_offset) * (3.33f / 4096.0f) * ((VIN_R1 + VIN_R2) / VIN_R2);
+            ((float)analogRead(PIN_ANALOG_BATTERY_VOLTAGE) - adc_offset_v_charge) * (3.3f / 4096.0f) * ((VIN_R1 + VIN_R2) / VIN_R2);
 #ifndef IGNORE_CHARGING_CURRENT
         status_message.charging_current =
-            ((float)analogRead(PIN_ANALOG_CHARGE_CURRENT) - adc_offset) * (3.33f / 4096.0f) / (CURRENT_SENSE_GAIN * R_SHUNT);
+            ((float)analogRead(PIN_ANALOG_CHARGE_CURRENT) - adc_offset_v_charge) * (3.3f / 4096.0f) / (CURRENT_SENSE_GAIN * R_SHUNT);
 #else
         status_message.charging_current = -1.0f;
 #endif
-        status_message.v_charge = ((float)analogRead(PIN_ANALOG_CHARGE_VOLTAGE) - adc_offset) * (3.33f / 4096.0f) * ((VIN_R1 + VIN_R2) / VIN_R2);
+        status_message.v_charge = ((float)analogRead(PIN_ANALOG_CHARGE_VOLTAGE) - adc_offset_v_charge) * (3.3f / 4096.0f) * ((VIN_R1 + VIN_R2) / VIN_R2);
 
-
-        // If undocked use charge voltage ADC to determine adc offset
         if( status_message.v_charge < 3.0f ) {
-            adc_offset_samples[next_adc_offset_sample++] = (float)analogRead(PIN_ANALOG_CHARGE_VOLTAGE);
-            next_adc_offset_sample %= 20;
+            // If undocked use charge voltage to determine voltage adc offset
+            adc_offset_samples_v_charge[next_adc_offset_sample_v_charge++] = (float)analogRead(PIN_ANALOG_CHARGE_VOLTAGE);
+            next_adc_offset_sample_v_charge %= 50;
 
-            float tmp = 0.0f;
-            for(int i=0; i<20; i++) {
-                tmp += adc_offset_samples[i];
+            if (next_adc_offset_sample_v_charge == 0) {
+                float tmp = 0.0f;
+                for(int i=0; i<50; i++) {
+                    tmp += adc_offset_samples_v_charge[i];
+                }
+                adc_offset_v_charge = tmp / 50.0f;
             }
-            adc_offset = tmp / 20.0f;
         }
-        digitalWrite(PIN_SMPS_POWERSAVE, LOW);
+
+        //digitalWrite(PIN_SMPS_POWERSAVE, LOW);
 
         status_message.status_bitmask = (status_message.status_bitmask & 0b11111011) | ((charging_allowed & 0b1) << 2);
         status_message.status_bitmask = (status_message.status_bitmask & 0b11011111) | ((sound_available & 0b1) << 5);
