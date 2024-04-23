@@ -159,8 +159,8 @@ void updateEmergency() {
 
     uint8_t emergency_state = 0;
 
-    bool is_tilted = emergency1 || emergency2;
-    bool is_lifted = emergency1 && emergency2;
+    bool is_tilted = emergency3 || emergency4;
+    bool is_lifted = emergency3 && emergency4;
     mutex_enter_blocking(&mtx_stop_pressed);
     bool local_stop_pressed = stop_pressed;
     mutex_exit(&mtx_stop_pressed);
