@@ -597,12 +597,17 @@ bool checkShouldCharge() {
         charging_paused = true;
     }
     return !charging_paused &&
-        status_message.v_charge > 3.0f &&
         status_message.v_charge < BATT_CHARGE_OVERVOLTAGE &&
         status_message.charging_current < BATT_CHARGE_OVERCURRENT;
 }
 
 void updateChargingEnabled() {
+    // Always enable for regen when not docked
+    if (status_message.v_charge < 3.0f) {
+        digitalWrite(PIN_ENABLE_CHARGE, HIGH);
+        charging_allowed = false; // For high level status
+        return;
+    }
     if (charging_allowed) {
         if (!checkShouldCharge()) {
             digitalWrite(PIN_ENABLE_CHARGE, LOW);
