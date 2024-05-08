@@ -154,15 +154,16 @@ void updateEmergency() {
     bool dispatch_emergency = false;
 
     // Mask the emergency bits. 2x Lift sensor, 2x Bump sensor
-    bool emergency1 = !gpio_get(PIN_EMERGENCY_1);
-    bool emergency2 = !gpio_get(PIN_EMERGENCY_2);
-    bool emergency3 = gpio_get(PIN_EMERGENCY_3);
-    bool emergency4 = gpio_get(PIN_EMERGENCY_4);
+    bool emergency1 = gpio_get(PIN_EMERGENCY_1); // FR Lift
+    bool emergency2 = gpio_get(PIN_EMERGENCY_2); // FL Lift
+    bool emergency3 = gpio_get(PIN_EMERGENCY_3); // RR Bump
+    bool emergency4 = gpio_get(PIN_EMERGENCY_4); // RL Bump
 
     uint8_t emergency_state = 0;
 
-    bool is_tilted = emergency3 || emergency4;
-    bool is_lifted = emergency3 && emergency4;
+    // Tilt emergency for bump sensors until obstacle detection implemented
+    bool is_tilted = emergency1 || emergency2 || emergency3 || emergency4;
+    bool is_lifted = emergency1 && emergency2;
     mutex_enter_blocking(&mtx_stop_pressed);
     bool local_stop_pressed = stop_pressed;
     mutex_exit(&mtx_stop_pressed);
