@@ -59,7 +59,7 @@ SerialPIO uiSerial(PIN_UI_TX, PIN_UI_RX, 250);
  * @brief Some hardware parameters
  */
 #define VIN_R1 9980.0f
-#define VIN_R2 998.0f
+#define VIN_R2 1000.0f
 #define R_SHUNT 0.003f
 #define CURRENT_SENSE_GAIN 100.0f
 
