@@ -68,13 +68,13 @@ float adc_offset = 0.0f;
 // Limit adc_offset to 3%
 #define MAX_ADC_OFFSET_PC 0.03f
 
-#define BATT_ABS_MAX 28.7f
+#define BATT_ABS_MAX 28.5f
 #define BATT_ABS_MIN 21.7f
 #define BATT_TOPUP_RANGE 0.5f
 #define BATT_CHARGE_OVERCURRENT 2.0f
 #define BATT_CHARGE_OVERVOLTAGE 30.0f
 
-#define BATT_FULL 27.75f
+#define BATT_FULL 28.0f
 #define BATT_EMPTY 22.6f
 
 // Emergency will be engaged, if no heartbeat was received in this time frame.
