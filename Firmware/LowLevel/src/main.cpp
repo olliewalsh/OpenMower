@@ -65,8 +65,8 @@ SerialPIO uiSerial(PIN_UI_TX, PIN_UI_RX, 250);
 int next_adc_offset_sample = 0;
 float adc_offset_samples[20] = {0};
 float adc_offset = 0.0f;
-// Limit adc_offset to 3%
-#define MAX_ADC_OFFSET_PC 0.03f
+// Limit adc_offset to 0%
+#define MAX_ADC_OFFSET_PC 0.0f
 
 #define BATT_ABS_MAX 28.5f
 #define BATT_ABS_MIN 21.7f
