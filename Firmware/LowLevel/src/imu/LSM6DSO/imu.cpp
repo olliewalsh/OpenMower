@@ -36,6 +36,9 @@ bool init_imu() {
     if (status != 0)
         return false;
 
+    if (IMU.Set_G_FS(250) != 0)
+        return false;
+
     if (IMU.Enable_G() != 0)
         return false;
 
