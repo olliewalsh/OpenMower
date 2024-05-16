@@ -72,7 +72,7 @@ float adc_offset = 0.0f;
 #define BATT_ABS_MIN 21.7f
 // Ensure this is greater than than voltage jump when enabling charging or it will flap
 #define BATT_TOPUP_RANGE 0.5f
-#define BATT_CHARGE_OVERCURRENT 5.8f
+#define BATT_CHARGE_OVERCURRENT 3.5f
 #define BATT_CHARGE_OVERVOLTAGE 30.0f
 
 #define BATT_FULL 28.0f
