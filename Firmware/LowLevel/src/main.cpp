@@ -36,6 +36,7 @@
 #define LIFT_EMERGENCY_MILLIS 100  // Time for both wheels to be lifted in order to count as emergency. This is to filter uneven ground.
 #define BUTTON_EMERGENCY_MILLIS 20 // Time for button emergency to activate. This is to debounce the button if triggered on bumpy surfaces
 
+#define SHUTDOWN_ESC_MAX_PITCH 15.0 // Do not shutdown ESCs if absolute pitch angle is greater than this
 // Define to stream debugging messages via USB
 // #define USB_DEBUG
 
@@ -128,6 +129,7 @@ bool ROS_running = false;
 unsigned long charging_disabled_time = 0;
 
 float imu_temp[9];
+float pitch_angle = 0, roll_angle = 0, tilt_angle = 0;
 
 uint16_t ui_version = 0;                   // Last received UI firmware version
 uint8_t ui_topic_bitmask = Topic_set_leds; // UI subscription, default to Set_LEDs
@@ -397,6 +399,9 @@ void setup() {
     pinMode(LED_BUILTIN, OUTPUT);
     pinMode(PIN_ENABLE_CHARGE, OUTPUT);
     digitalWrite(PIN_ENABLE_CHARGE, HIGH);
+
+    pinMode(PIN_ESC_SHUTDOWN, OUTPUT);
+    digitalWrite(PIN_ESC_SHUTDOWN, LOW);
 
     gpio_init(PIN_RASPI_POWER);
     gpio_put(PIN_RASPI_POWER, true);
@@ -695,6 +700,12 @@ void loop() {
         sendMessage(&imu_message, sizeof(struct ll_imu));
 
         last_imu_millis = now;
+
+        // Update pitch, roll, tilt
+        pitch_angle = atan2f(imu_temp[0], imu_temp[2]) * 180.0f / M_PI;
+        roll_angle = atan2f(imu_temp[1], imu_temp[2]) * 180.0f / M_PI;
+        float accXY = sqrtf((imu_temp[0]*imu_temp[0]) + (imu_temp[1]*imu_temp[1]));
+        tilt_angle = atan2f(accXY, imu_temp[2]) * 180.0f / M_PI;
     }
 
     if (now - last_status_update_millis > STATUS_CYCLETIME) {
@@ -710,6 +721,19 @@ void loop() {
 #endif
         status_message.v_charge = ((float)analogRead(PIN_ANALOG_CHARGE_VOLTAGE) - adc_offset) * (3.33f / 4096.0f) * ((VIN_R1 + VIN_R2) / VIN_R2);
 
+#ifdef SHUTDOWN_ESC_WHEN_IDLE
+        // ESC power saving when mower is IDLE
+        if(!ROS_running || last_high_level_state.current_mode != HighLevelMode::MODE_IDLE || fabs(pitch_angle) > SHUTDOWN_ESC_MAX_PITCH) {
+            // Enable escs if not idle, or if ROS is not running, or on a slope
+            digitalWrite(PIN_ESC_SHUTDOWN, LOW);
+            status_message.status_bitmask |= 0b1000;
+        } else {
+            digitalWrite(PIN_ESC_SHUTDOWN, HIGH);
+            status_message.status_bitmask &= 0b11110111;
+        }
+#else
+        status_message.status_bitmask |= 0b1000;
+#endif
 
         // If mowing use charge current ADC to determine adc offset
         if(
