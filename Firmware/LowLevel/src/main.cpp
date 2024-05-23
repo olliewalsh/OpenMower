@@ -33,8 +33,8 @@
 #define UI_GET_VERSION_TIMEOUT 100    // timeout for UI Get_Version response (UI available check)
 
 #define TILT_EMERGENCY_MILLIS 0  // Time for a single wheel to be lifted in order to count as emergency. This is to filter uneven ground.
-#define LIFT_EMERGENCY_MILLIS 100  // Time for both wheels to be lifted in order to count as emergency. This is to filter uneven ground.
-#define BUTTON_EMERGENCY_MILLIS 20 // Time for button emergency to activate. This is to debounce the button if triggered on bumpy surfaces
+#define LIFT_EMERGENCY_MILLIS 200  // Time for both wheels to be lifted in order to count as emergency. This is to filter uneven ground.
+#define BUTTON_EMERGENCY_MILLIS 20 // Time for button emergency to activate. This is to debounce the button.
 
 #define SHUTDOWN_ESC_MAX_PITCH 15.0 // Do not shutdown ESCs if absolute pitch angle is greater than this
 // Define to stream debugging messages via USB
