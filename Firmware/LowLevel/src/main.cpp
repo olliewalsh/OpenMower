@@ -33,8 +33,10 @@
 #define UI_GET_VERSION_CYCLETIME 5000 // cycletime for UI Get_Version request (UI available check)
 #define UI_GET_VERSION_TIMEOUT 100    // timeout for UI Get_Version response (UI available check)
 
-#define TILT_EMERGENCY_MILLIS 500  // Time for a single wheel to be lifted in order to count as emergency. This is to filter uneven ground.
-#define LIFT_EMERGENCY_MILLIS 100  // Time for both wheels to be lifted in order to count as emergency. This is to filter uneven ground.
+#define TILT_EMERGENCY_ANGLE 30 // Tile angle (in any direction) in order to count as emergency.
+#define TILT_EMERGENCY_MILLIS 250  // Time for tile angle to be over threshold in order to count as emergency.
+#define LIFT_EMERGENCY_MILLIS 250  // Time for both wheels to be lifted in order to count as emergency. This is to filter uneven ground.
+#define BUTTON_EMERGENCY_MILLIS 20 // Time for button emergency to activate. This is to debounce the button.
 
 #define SHUTDOWN_ESC_MAX_PITCH 15.0 // Do not shutdown ESCs if absolute pitch angle is greater than this
 // Define to stream debugging messages via USB
@@ -148,7 +150,8 @@ void setRaspiPower(bool power) {
 
 void updateEmergency() {
 
-    if (millis() - last_heartbeat_millis > HEARTBEAT_MILLIS) {
+    unsigned long now = millis();
+    if (now - last_heartbeat_millis > HEARTBEAT_MILLIS) {
         emergency_latch = true;
         ROS_running = false;
     }
@@ -162,6 +165,14 @@ void updateEmergency() {
     bool emergency4 = 0; //!gpio_get(PIN_EMERGENCY_4); // RL Bump
 
     uint8_t emergency_state = 0;
+    uint8_t emergency_read = 0;
+
+    if (
+        (now - last_imu_millis > STATUS_CYCLETIME) ||
+        (TILT_EMERGENCY_ANGLE > 0 && fabs(tilt_angle) > TILT_EMERGENCY_ANGLE)
+    ) {
+        emergency_read |= LL_EMERGENCY_BIT_TILT;
+    }
 
     // Tilt emergency for bump sensors until obstacle detection implemented
     bool is_tilted = emergency1 || emergency2 || emergency3 || emergency4;
@@ -180,17 +191,9 @@ void updateEmergency() {
         lift_emergency_started = 0;
     }
 
-    if (LIFT_EMERGENCY_MILLIS && lift_emergency_started > 0 && (millis() - lift_emergency_started) >= LIFT_EMERGENCY_MILLIS) {
-        // Emergency bit 2 (lift wheel 1)set?
-        if (emergency1)
-            emergency_state |= 0b01000;
-        // Emergency bit 1 (lift wheel 2)set?
-        if (emergency2)
-            emergency_state |= 0b10000;
-    }
-
-    if (is_tilted) {
-        // We just tilted, store the timestamp
+    // Handle tilted
+    if (emergency_read & LL_EMERGENCY_BIT_TILT) {
+        // If we just tilted, store the timestamp
         if (tilt_emergency_started == 0) {
             tilt_emergency_started = millis();
         }
@@ -199,7 +202,7 @@ void updateEmergency() {
         tilt_emergency_started = 0;
     }
 
-    if (TILT_EMERGENCY_MILLIS && tilt_emergency_started > 0 && (millis() - tilt_emergency_started) >= TILT_EMERGENCY_MILLIS) {
+    if (LIFT_EMERGENCY_MILLIS && lift_emergency_started > 0 && (millis() - lift_emergency_started) >= LIFT_EMERGENCY_MILLIS) {
         // Emergency bit 2 (lift wheel 1)set?
         if (emergency1)
             emergency_state |= 0b01000;
@@ -209,6 +212,9 @@ void updateEmergency() {
     }
     if (local_stop_pressed) {
         emergency_state |= 0b00110;
+    }
+    if (TILT_EMERGENCY_MILLIS > 0 && tilt_emergency_started > 0 && (millis() - tilt_emergency_started) >= TILT_EMERGENCY_MILLIS) {
+        emergency_state |= (emergency_read & LL_EMERGENCY_BIT_TILT);
     }
 
     if (emergency_state || emergency_latch) {

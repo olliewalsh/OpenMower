@@ -32,6 +32,20 @@ enum HighLevelMode {
     MODE_RECORDING = 3 // ROS connected, Manual mode during recording etc
 };
 
+#define LL_EMERGENCY_BIT_LATCH 0b00000001
+#define LL_EMERGENCY_BIT_HALL1 0b00001000 // Lift1
+#define LL_EMERGENCY_BIT_HALL2 0b00010000 // Lift2
+#define LL_EMERGENCY_BIT_HALL3 0b00000010 // Stop1
+#define LL_EMERGENCY_BIT_HALL4 0b00000100 // Stop2
+#define LL_EMERGENCY_BIT_TILT  0b10000000
+
+#define LL_EMERGENCY_BIT_LIFT1 LL_EMERGENCY_BIT_HALL1
+#define LL_EMERGENCY_BIT_LIFT2 LL_EMERGENCY_BIT_HALL2
+#define LL_EMERGENCY_BITS_LIFT (LL_EMERGENCY_BIT_LIFT1 | LL_EMERGENCY_BIT_LIFT2)
+#define LL_EMERGENCY_BIT_STOP1 LL_EMERGENCY_BIT_HALL3
+#define LL_EMERGENCY_BIT_STOP2 LL_EMERGENCY_BIT_HALL4
+#define LL_EMERGENCY_BITS_STOP (LL_EMERGENCY_BIT_STOP1 | LL_EMERGENCY_BIT_STOP2)
+
 #define LL_STATUS_BIT_UI_AVAIL 0b10000000
 
 #pragma pack(push, 1)
@@ -52,10 +66,13 @@ struct ll_status {
     float uss_ranges_m[5];
     // Emergency bitmask:
     // Bit 0: Emergency latch
-    // Bit 1: Emergency 0 active
-    // Bit 2: Emergency 1 active
-    // Bit 3: Emergency 2 active
-    // Bit 4: Emergency 3 active
+    // Bit 1: Emergency/Hall 3 (Stop1) active
+    // Bit 2: Emergency/Hall 4 (Stop2) active
+    // Bit 3: Emergency/Hall 1 (Lift1) active
+    // Bit 4: Emergency/Hall 2 (Lift2) active
+    // Bit 5: not used
+    // Bit 6: not used
+    // Bit 7: Emergency/Tilt active
     uint8_t emergency_bitmask;
     // Charge voltage
     float v_charge;
@@ -111,7 +128,7 @@ struct ll_high_level_state {
 struct ll_ui_event {
     // Type of this message. Has to be PACKET_ID_LL_UI_EVENT
     uint8_t type;
-    uint8_t button_id; 
+    uint8_t button_id;
     uint8_t press_duration;   // 0 for single press, 1 for long, 2 for very long press
     uint16_t crc;
 } __attribute__((packed));
