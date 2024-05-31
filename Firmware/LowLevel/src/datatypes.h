@@ -39,6 +39,7 @@ enum HighLevelMode {
 #define LL_EMERGENCY_BIT_HALL2 0b00010000 // Lift2
 #define LL_EMERGENCY_BIT_HALL3 0b00000010 // Stop1
 #define LL_EMERGENCY_BIT_HALL4 0b00000100 // Stop2
+#define LL_EMERGENCY_BIT_TILT  0b10000000
 
 #define LL_EMERGENCY_BIT_LIFT1 LL_EMERGENCY_BIT_HALL1
 #define LL_EMERGENCY_BIT_LIFT2 LL_EMERGENCY_BIT_HALL2
@@ -71,6 +72,9 @@ struct ll_status {
     // Bit 2: Emergency/Hall 4 (Stop2) active
     // Bit 3: Emergency/Hall 1 (Lift1) active
     // Bit 4: Emergency/Hall 2 (Lift2) active
+    // Bit 5: not used
+    // Bit 6: not used
+    // Bit 7: Emergency/Tilt active
     uint8_t emergency_bitmask;
     // Charge voltage
     float v_charge;
