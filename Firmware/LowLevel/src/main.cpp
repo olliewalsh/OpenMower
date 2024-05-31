@@ -739,8 +739,11 @@ void loop() {
 
 #ifdef SHUTDOWN_ESC_WHEN_IDLE
         // ESC power saving when mower is IDLE
-        if(!ROS_running || last_high_level_state.current_mode != HighLevelMode::MODE_IDLE || fabs(pitch_angle) > SHUTDOWN_ESC_MAX_PITCH) {
-            // Enable escs if not idle, or if ROS is not running, or on a slope
+        if(!ROS_running ||
+                (!emergency_latch && last_high_level_state.current_mode != HighLevelMode::MODE_IDLE) ||
+                fabs(pitch_angle) > SHUTDOWN_ESC_MAX_PITCH
+        ) {
+            // Enable escs if not idle and not emergency, or if ROS is not running (for vesc-tool), or on a slope
             digitalWrite(PIN_ESC_SHUTDOWN, LOW);
             status_message.status_bitmask |= 0b1000;
         } else {
