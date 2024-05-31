@@ -38,6 +38,8 @@ using namespace soundSystem;
 #define UI_GET_VERSION_CYCLETIME 5000 // cycletime for UI Get_Version request (UI available check)
 #define UI_GET_VERSION_TIMEOUT 100    // timeout for UI Get_Version response (UI available check)
 
+#define TILT_EMERGENCY_ANGLE 30  // IMU tilt angle in any direction which counts as an emergency.
+#define TILT_EMERGENCY_MILLIS 250  // Time over the IMU tilt threshold before engaging the emergency.
 #define BUTTON_EMERGENCY_MILLIS 20 // Time for button emergency to activate. This is to debounce the button.
 
 #define PACKET_SERIAL Serial1
@@ -73,6 +75,7 @@ unsigned long next_ui_msg_millis = 0;
 
 unsigned long lift_emergency_started = 0;
 unsigned long tilt_emergency_started = 0;
+unsigned long imu_tilt_emergency_started = 0;
 unsigned long button_emergency_started = 0;
 
 unsigned long ui_get_version_next_millis = 0;     // Next cycle when to check for a UI version
@@ -146,7 +149,8 @@ void setRaspiPower(bool power) {
 }
 
 void updateEmergency() {
-    if (millis() - last_heartbeat_millis > HEARTBEAT_MILLIS) {
+    unsigned long now = millis();
+    if (now - last_heartbeat_millis > HEARTBEAT_MILLIS) {
         emergency_latch = true;
         ROS_running = false;
     }
@@ -194,9 +198,22 @@ void updateEmergency() {
         tilt_emergency_started = 0;  // Not tilted, reset the time
     }
 
+    // Handle an invalid/stale IMU or an excessive chassis tilt independently from the configured hall inputs.
+    bool imu_tilted = (now - last_imu_millis > STATUS_CYCLETIME) ||
+                      (TILT_EMERGENCY_ANGLE > 0 && fabs(tilt_angle) > TILT_EMERGENCY_ANGLE);
+    if (imu_tilted) {
+        if (imu_tilt_emergency_started == 0) imu_tilt_emergency_started = now;
+    } else {
+        imu_tilt_emergency_started = 0;
+    }
+
     // Evaluate lift & tilt periods
     if ((llhl_config.lift_period > 0 && lift_emergency_started > 0 && (millis() - lift_emergency_started) >= llhl_config.lift_period) ||
         (llhl_config.tilt_period > 0 && tilt_emergency_started > 0 && (millis() - tilt_emergency_started) >= llhl_config.tilt_period)) {
+        emergency_state |= LL_EMERGENCY_BIT_LIFT;
+    }
+    if (TILT_EMERGENCY_MILLIS > 0 && imu_tilt_emergency_started > 0 &&
+        (now - imu_tilt_emergency_started) >= TILT_EMERGENCY_MILLIS) {
         emergency_state |= LL_EMERGENCY_BIT_LIFT;
     }
 
