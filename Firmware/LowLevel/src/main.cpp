@@ -32,8 +32,8 @@
 #define UI_GET_VERSION_CYCLETIME 5000 // cycletime for UI Get_Version request (UI available check)
 #define UI_GET_VERSION_TIMEOUT 100    // timeout for UI Get_Version response (UI available check)
 
-#define TILT_EMERGENCY_ANGLE 30 // Tile angle (in any direction) in order to count as emergency.
-#define TILT_EMERGENCY_MILLIS 250  // Time for tile angle to be over threshold in order to count as emergency.
+#define TILT_EMERGENCY_ANGLE 35 // Tile angle (in any direction) in order to count as emergency.
+#define TILT_EMERGENCY_MILLIS 500  // Time for tile angle to be over threshold in order to count as emergency.
 #define LIFT_EMERGENCY_MILLIS 250  // Time for both wheels to be lifted in order to count as emergency. This is to filter uneven ground.
 #define BUTTON_EMERGENCY_MILLIS 20 // Time for button emergency to activate. This is to debounce the button.
 
