@@ -38,7 +38,7 @@
 
 #define SHUTDOWN_ESC_MAX_PITCH 15.0 // Do not shutdown ESCs if absolute pitch angle is greater than this
 // Define to stream debugging messages via USB
-// #define USB_DEBUG
+#define USB_DEBUG
 
 // Only define DEBUG_SERIAL if USB_DEBUG is actually enabled.
 // This enforces compile errors if it's used incorrectly.
@@ -703,13 +703,13 @@ void loop() {
         if(!ROS_running || last_high_level_state.current_mode != HighLevelMode::MODE_IDLE || fabs(pitch_angle) > SHUTDOWN_ESC_MAX_PITCH) {
             // Enable escs if not idle, or if ROS is not running, or on a slope
             digitalWrite(PIN_ESC_SHUTDOWN, LOW);
-            status_message.status_bitmask |= 0b1000;
+            status_message.status_bitmask |= LL_STATUS_BIT_ESC_POWER;
         } else {
             digitalWrite(PIN_ESC_SHUTDOWN, HIGH);
-            status_message.status_bitmask &= 0b11110111;
+            status_message.status_bitmask &= ~LL_STATUS_BIT_ESC_POWER;
         }
 #else
-        status_message.status_bitmask |= 0b1000;
+        status_message.status_bitmask |= LL_STATUS_BIT_ESC_POWER;
 #endif
 
         status_message.status_bitmask = (status_message.status_bitmask & 0b11111011) | ((charging_allowed & 0b1) << 2);
@@ -743,6 +743,12 @@ void loop() {
         DEBUG_SERIAL.print(" A\t");
         DEBUG_SERIAL.print("emergency: 0b");
         DEBUG_SERIAL.print(status_message.emergency_bitmask, BIN);
+        DEBUG_SERIAL.print("\troll: ");
+        DEBUG_SERIAL.print(roll_angle, 3);
+        DEBUG_SERIAL.print("\tpitch: ");
+        DEBUG_SERIAL.print(pitch_angle, 3);
+        DEBUG_SERIAL.print("\ttilt: ");
+        DEBUG_SERIAL.print(tilt_angle, 3);
         DEBUG_SERIAL.println();
 #endif
     }

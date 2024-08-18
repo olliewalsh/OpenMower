@@ -47,7 +47,8 @@ enum HighLevelMode {
 #define LL_EMERGENCY_BIT_STOP2 LL_EMERGENCY_BIT_HALL4
 #define LL_EMERGENCY_BITS_STOP (LL_EMERGENCY_BIT_STOP1 | LL_EMERGENCY_BIT_STOP2)
 
-#define LL_STATUS_BIT_UI_AVAIL 0b10000000
+#define LL_STATUS_BIT_ESC_POWER 0b1 << 3
+#define LL_STATUS_BIT_UI_AVAIL  0b1 << 7
 
 #pragma pack(push, 1)
 struct ll_status {
