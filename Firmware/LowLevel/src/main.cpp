@@ -36,7 +36,7 @@
 #define LIFT_EMERGENCY_MILLIS 100  // Time for both wheels to be lifted in order to count as emergency (0 disable). This is to filter uneven ground.
 #define BUTTON_EMERGENCY_MILLIS 20 // Time for button emergency to activate. This is to debounce the button.
 
-#define SHUTDOWN_ESC_MAX_PITCH 15.0 // Do not shutdown ESCs if absolute pitch angle is greater than this
+#define SHUTDOWN_ESC_MAX_TILT 15.0f  // Shutdown ESCs if tilt angle is greater than this
 // Define to stream debugging messages via USB
 // #define USB_DEBUG
 
@@ -699,17 +699,17 @@ void loop() {
 #endif
 
 #ifdef SHUTDOWN_ESC_WHEN_IDLE
-        // ESC power saving when mower is IDLE
-        if(!ROS_running || last_high_level_state.current_mode != HighLevelMode::MODE_IDLE || fabs(pitch_angle) > SHUTDOWN_ESC_MAX_PITCH) {
-            // Enable escs if not idle, or if ROS is not running, or on a slope
+        // ESC power saving and safety shutdown
+        if ((!ROS_running || last_high_level_state.current_mode != HighLevelMode::MODE_IDLE) && tilt_angle <= SHUTDOWN_ESC_MAX_TILT) {
+            // Enable ESCs if ROS is not running, or not idle, but in any case only if not tilted
             digitalWrite(PIN_ESC_SHUTDOWN, LOW);
-            status_message.status_bitmask |= 0b1000;
+            status_message.status_bitmask |= LL_STATUS_BIT_ESC_POWER;
         } else {
             digitalWrite(PIN_ESC_SHUTDOWN, HIGH);
-            status_message.status_bitmask &= 0b11110111;
+            status_message.status_bitmask &= ~LL_STATUS_BIT_ESC_POWER;
         }
 #else
-        status_message.status_bitmask |= 0b1000;
+        status_message.status_bitmask |= LL_STATUS_BIT_ESC_POWER;
 #endif
 
         status_message.status_bitmask = (status_message.status_bitmask & 0b11111011) | ((charging_allowed & 0b1) << 2);
@@ -743,6 +743,12 @@ void loop() {
         DEBUG_SERIAL.print(" A\t");
         DEBUG_SERIAL.print("emergency: 0b");
         DEBUG_SERIAL.print(status_message.emergency_bitmask, BIN);
+        DEBUG_SERIAL.print("\troll: ");
+        DEBUG_SERIAL.print(roll_angle, 3);
+        DEBUG_SERIAL.print("\tpitch: ");
+        DEBUG_SERIAL.print(pitch_angle, 3);
+        DEBUG_SERIAL.print("\ttilt: ");
+        DEBUG_SERIAL.print(tilt_angle, 3);
         DEBUG_SERIAL.println();
 #endif
     }
