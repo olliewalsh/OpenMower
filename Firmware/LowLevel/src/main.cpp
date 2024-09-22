@@ -69,12 +69,12 @@ float adc_offset = 0.0f;
 // Limit adc_offset to 3%
 #define MAX_ADC_OFFSET_PC 0.03f
 
-#define BATT_ABS_MAX 28.5f
+#define BATT_ABS_MAX 29.2f
 #define BATT_ABS_MIN 21.7f
-// Ensure this is greater than than voltage jump when enabling charging or it will flap
 #define BATT_TOPUP_RANGE 0.5f
 #define BATT_CHARGE_OVERCURRENT 3.5f
-#define BATT_CHARGE_OVERVOLTAGE 30.0f
+#define BATT_CHARGE_OVERVOLTAGE 30.7f
+#define BATT_CHARGE_MINCURRENT 0.3f
 
 #define BATT_FULL 28.0f
 #define BATT_EMPTY 22.6f
@@ -125,10 +125,10 @@ auto_init_mutex(mtx_stop_pressed);
 bool stop_pressed = false;
 bool emergency_latch = true;
 bool sound_available = false;
-bool charging_allowed = false;
+bool charging_allowed = true;
 bool charging_paused = false;
 bool ROS_running = false;
-unsigned long charging_disabled_time = 0;
+unsigned long charging_disabled_time = 0, charging_enabled_time = 0, charging_paused_time = 0;
 
 float imu_temp[9];
 float pitch_angle = 0, roll_angle = 0, tilt_angle = 0;
@@ -599,7 +599,7 @@ bool checkShouldCharge() {
     if(charging_paused && status_message.v_battery < (BATT_ABS_MAX - BATT_TOPUP_RANGE)) {
         charging_paused = false;
     }
-    if(status_message.v_battery >= BATT_ABS_MAX) {
+    if(charging_allowed && (millis() - charging_enabled_time) > 300000 && status_message.charging_current < BATT_CHARGE_MINCURRENT) {
         charging_paused = true;
     }
     return !charging_paused &&
@@ -608,11 +608,22 @@ bool checkShouldCharge() {
 }
 
 void updateChargingEnabled() {
-    // Always enable for regen when not docked
     if (status_message.v_charge < 3.0f) {
-        digitalWrite(PIN_ENABLE_CHARGE, HIGH);
-        charging_allowed = false; // For high level status
-        return;
+        charging_paused = false;
+        // Always enable for regen when mowing
+        if (ROS_running &&
+                (last_high_level_state.current_mode >> 6) & 0b11 == 0) {
+            digitalWrite(PIN_ENABLE_CHARGE, HIGH);
+            charging_allowed = false; // For high level status
+            return;
+        }
+        else {
+            // Disable charging while docking
+            digitalWrite(PIN_ENABLE_CHARGE, LOW);
+            charging_allowed = false;
+            charging_disabled_time = millis();
+            return;
+        }
     }
     if (charging_allowed) {
         if (!checkShouldCharge()) {
@@ -630,6 +641,7 @@ void updateChargingEnabled() {
             } else {
                 digitalWrite(PIN_ENABLE_CHARGE, HIGH);
                 charging_allowed = true;
+                charging_enabled_time = millis();
             }
         }
     }
@@ -714,7 +726,7 @@ void loop() {
         // If mowing use charge current ADC to determine adc offset
         if(
                 ROS_running &&
-                last_high_level_state.current_mode == HighLevelMode::MODE_AUTONOMOUS &&
+                last_high_level_state.current_mode & 0b111111 == HighLevelMode::MODE_AUTONOMOUS &&
                 last_high_level_state.gps_quality != 0
             ) {
             adc_offset_samples[next_adc_offset_sample++] = (float)analogRead(PIN_ANALOG_CHARGE_VOLTAGE);
