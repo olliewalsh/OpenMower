@@ -69,12 +69,12 @@ float adc_offset = 0.0f;
 // Limit adc_offset to 3%
 #define MAX_ADC_OFFSET_PC 0.03f
 
-#define BATT_ABS_MAX 28.5f
+#define BATT_ABS_MAX 33.0f
 #define BATT_ABS_MIN 21.7f
 // Ensure this is greater than than voltage jump when enabling charging or it will flap
 #define BATT_TOPUP_RANGE 0.5f
 #define BATT_CHARGE_OVERCURRENT 3.5f
-#define BATT_CHARGE_OVERVOLTAGE 30.0f
+#define BATT_CHARGE_OVERVOLTAGE 33.0f
 
 #define BATT_FULL 28.0f
 #define BATT_EMPTY 22.6f
@@ -156,10 +156,10 @@ void updateEmergency() {
     bool dispatch_emergency = false;
 
     // Mask the emergency bits. 2x Lift sensor, 2x Bump sensor
-    bool emergency1 = gpio_get(PIN_EMERGENCY_1); // FR Lift
-    bool emergency2 = gpio_get(PIN_EMERGENCY_2); // FL Lift
-    bool emergency3 = gpio_get(PIN_EMERGENCY_3); // RR Bump
-    bool emergency4 = gpio_get(PIN_EMERGENCY_4); // RL Bump
+    bool emergency1 = 0; //!gpio_get(PIN_EMERGENCY_1); // FR Lift
+    bool emergency2 = 0; //!gpio_get(PIN_EMERGENCY_2); // FL Lift
+    bool emergency3 = 0; //!gpio_get(PIN_EMERGENCY_3); // RR Bump
+    bool emergency4 = 0; //!gpio_get(PIN_EMERGENCY_4); // RL Bump
 
     uint8_t emergency_state = 0;
 
@@ -226,10 +226,10 @@ void updateEmergency() {
         // }
     }
 
-    status_message.uss_ranges_m[0] = emergency1;
-    status_message.uss_ranges_m[1] = emergency2;
-    status_message.uss_ranges_m[2] = emergency3;
-    status_message.uss_ranges_m[3] = emergency4;
+    // status_message.uss_ranges_m[0] = emergency1;
+    // status_message.uss_ranges_m[1] = emergency2;
+    // status_message.uss_ranges_m[2] = emergency3;
+    // status_message.uss_ranges_m[3] = emergency4;
 
     status_message.emergency_bitmask = emergency_state;
 
@@ -349,15 +349,16 @@ void loop1() {
             // STOP buttons are NC switches
             // Pull-up ECHO to 5v, switch ECHO to GND
             // OR the first 3 values in a thread local var, for the 4th OR it and set the global var
-            case 0:
-            case 1:
             case 2:
                 local_stop_pressed |= state;
-                break;
-            case 3:
                 mutex_enter_blocking(&mtx_stop_pressed);
-                stop_pressed = local_stop_pressed | state;
+                stop_pressed = local_stop_pressed;
                 mutex_exit(&mtx_stop_pressed);
+            case 0: // TODO: 0,1 are left/right bump hall sensors. 1 no bump, 0 bump
+            case 1:
+            case 3:
+            case 4:
+                status_message.uss_ranges_m[mux_address] = state;
                 break;
             case 5:
                 mutex_enter_blocking(&mtx_status_message);
