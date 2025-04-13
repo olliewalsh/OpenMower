@@ -98,6 +98,11 @@ struct msg_set_leds leds_message = {0};
 // We can lock it during message transmission to prevent core1 to modify data in this time.
 auto_init_mutex(mtx_status_message);
 
+auto_init_mutex(mtx_rm24_inputs);
+bool rm24_stop_pressed = false;
+bool rm24_bump0 = false;
+bool rm24_bump1 = false;
+
 bool emergency_latch = true;
 bool sound_available = false;
 bool charging_allowed = false;
@@ -172,6 +177,12 @@ void updateEmergency() {
                 break;
         }
     }
+
+    mutex_enter_blocking(&mtx_rm24_inputs);
+    stop_pressed |= rm24_stop_pressed;
+    num_lifted += rm24_bump0 ? 1 : 0;
+    num_lifted += rm24_bump1 ? 1 : 0;
+    mutex_exit(&mtx_rm24_inputs);
 
     // Handle emergency "Stop" buttons
     if (stop_pressed) {
@@ -349,13 +360,32 @@ void setup1() {
 }
 
 void loop1() {
+    bool local_stop_pressed = false;
+    bool local_bump0 = false;
+    bool local_bump1 = false;
+
     // Loop through the mux and query actions. Store the result in the multicore fifo
     for (uint8_t mux_address = 0; mux_address < 7; mux_address++) {
         gpio_put_masked(0b111 << 13, mux_address << 13);
         delay(1);
         bool state = gpio_get(PIN_MUX_IN);
 
+        if (mux_address < 5) {
+            mutex_enter_blocking(&mtx_status_message);
+            status_message.uss_ranges_m[mux_address] = state;
+            mutex_exit(&mtx_status_message);
+        }
+
         switch (mux_address) {
+            case 0:
+                local_bump0 = state;
+                break;
+            case 1:
+                local_bump1 = state;
+                break;
+            case 2:
+                local_stop_pressed = state;
+                break;
             case 5:
                 mutex_enter_blocking(&mtx_status_message);
 
@@ -380,6 +410,12 @@ void loop1() {
                 break;
         }
     }
+
+    mutex_enter_blocking(&mtx_rm24_inputs);
+    rm24_stop_pressed = local_stop_pressed;
+    rm24_bump0 = local_bump0;
+    rm24_bump1 = local_bump1;
+    mutex_exit(&mtx_rm24_inputs);
 
 #ifdef ENABLE_SOUND_MODULE
     soundSystem::processSounds(status_message, ROS_running, last_high_level_state);
