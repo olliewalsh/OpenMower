@@ -35,7 +35,7 @@
 
 #define TILT_EMERGENCY_ANGLE 30 // Tile angle (in any direction) in order to count as emergency.
 #define TILT_EMERGENCY_MILLIS 250  // Time for tile angle to be over threshold in order to count as emergency.
-#define LIFT_EMERGENCY_MILLIS 250  // Time for both wheels to be lifted in order to count as emergency. This is to filter uneven ground.
+#define LIFT_EMERGENCY_MILLIS 800  // Time for both wheels to be lifted in order to count as emergency. This is to filter uneven ground.
 #define BUTTON_EMERGENCY_MILLIS 20 // Time for button emergency to activate. This is to debounce the button.
 
 #define SHUTDOWN_ESC_MAX_PITCH 15.0 // Do not shutdown ESCs if absolute pitch angle is greater than this
@@ -125,6 +125,10 @@ auto_init_mutex(mtx_status_message);
 
 auto_init_mutex(mtx_stop_pressed);
 bool stop_pressed = false;
+auto_init_mutex(mtx_bump0);
+bool bump0 = false;
+auto_init_mutex(mtx_bump1);
+bool bump1 = false;
 bool emergency_latch = true;
 bool sound_available = false;
 bool charging_allowed = false;
@@ -161,8 +165,12 @@ void updateEmergency() {
     // Mask the emergency bits. 2x Lift sensor, 2x Bump sensor
     bool emergency1 = 0; //!gpio_get(PIN_EMERGENCY_1); // FR Lift
     bool emergency2 = 0; //!gpio_get(PIN_EMERGENCY_2); // FL Lift
-    bool emergency3 = 0; //!gpio_get(PIN_EMERGENCY_3); // RR Bump
-    bool emergency4 = 0; //!gpio_get(PIN_EMERGENCY_4); // RL Bump
+    mutex_enter_blocking(&mtx_bump0);
+    bool emergency3 = bump0; //!gpio_get(PIN_EMERGENCY_3); // RR Bump
+    mutex_exit(&mtx_bump0);
+    mutex_enter_blocking(&mtx_bump1);
+    bool emergency4 = bump1; //!gpio_get(PIN_EMERGENCY_4); // RL Bump
+    mutex_exit(&mtx_bump1);
 
     uint8_t emergency_state = 0;
     uint8_t emergency_read = 0;
@@ -176,7 +184,7 @@ void updateEmergency() {
 
     // Tilt emergency for bump sensors until obstacle detection implemented
     bool is_tilted = emergency1 || emergency2 || emergency3 || emergency4;
-    bool is_lifted = emergency1 && emergency2;
+    bool is_lifted = emergency3 && emergency4;
     mutex_enter_blocking(&mtx_stop_pressed);
     bool local_stop_pressed = stop_pressed;
     mutex_exit(&mtx_stop_pressed);
@@ -204,10 +212,10 @@ void updateEmergency() {
 
     if (LIFT_EMERGENCY_MILLIS && lift_emergency_started > 0 && (millis() - lift_emergency_started) >= LIFT_EMERGENCY_MILLIS) {
         // Emergency bit 2 (lift wheel 1)set?
-        if (emergency1)
+        if (emergency3)
             emergency_state |= 0b01000;
         // Emergency bit 1 (lift wheel 2)set?
-        if (emergency2)
+        if (emergency4)
             emergency_state |= 0b10000;
     }
     if (local_stop_pressed) {
@@ -344,11 +352,17 @@ void setup1() {
 
 void loop1() {
     bool local_stop_pressed = false;
+    bool local_bump0 = false;
+    bool local_bump1 = false;
     // Loop through the mux and query actions. Store the result in the multicore fifo
     for (uint8_t mux_address = 0; mux_address < 7; mux_address++) {
         gpio_put_masked(0b111 << 13, mux_address << 13);
         delay(1);
         bool state = gpio_get(PIN_MUX_IN);
+
+        if (mux_address < 5) {
+            status_message.uss_ranges_m[mux_address] = state;
+        }
 
         switch (mux_address) {
             // Use USS ECHO pins for STOP buttons on SA650ECO
@@ -360,8 +374,19 @@ void loop1() {
                 mutex_enter_blocking(&mtx_stop_pressed);
                 stop_pressed = local_stop_pressed;
                 mutex_exit(&mtx_stop_pressed);
+                break;
             case 0: // TODO: 0,1 are left/right bump hall sensors. 1 no bump, 0 bump
+                local_bump0 |= state;
+                mutex_enter_blocking(&mtx_bump0);
+                bump0 = local_bump0;
+                mutex_exit(&mtx_bump0);
+                break;
             case 1:
+                local_bump1 |= state;
+                mutex_enter_blocking(&mtx_bump1);
+                bump1 = local_bump1;
+                mutex_exit(&mtx_bump1);
+                break;
             case 3:
             case 4:
                 status_message.uss_ranges_m[mux_address] = state;
