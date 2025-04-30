@@ -739,7 +739,7 @@ void onPacketReceived(const uint8_t *buffer, const size_t size) {
 
 // returns true, if it's a good idea to charge the battery (current, voltages, ...)
 bool checkShouldCharge() {
-    return status_message.v_charge < llhl_config.v_charge_cutoff && status_message.charging_current < llhl_config.i_charge_cutoff && status_message.v_battery < llhl_config.v_battery_cutoff;
+    return true;
 }
 
 void updateChargingEnabled() {
