@@ -76,7 +76,7 @@ float adc_offset = 0.0f;
 // Ensure this is greater than than voltage jump when enabling charging or it will flap
 #define BATT_TOPUP_RANGE 0.5f
 #define BATT_CHARGE_OVERCURRENT 3.5f
-#define BATT_CHARGE_OVERVOLTAGE 33.0f
+#define BATT_CHARGE_OVERVOLTAGE 35.0f
 
 #define BATT_FULL 28.0f
 #define BATT_EMPTY 22.6f
@@ -628,15 +628,16 @@ void onPacketReceived(const uint8_t *buffer, size_t size) {
 
 // returns true, if it's a good idea to charge the battery (current, voltages, ...)
 bool checkShouldCharge() {
-    if(charging_paused && status_message.v_battery < (BATT_ABS_MAX - BATT_TOPUP_RANGE)) {
-        charging_paused = false;
-    }
-    if(status_message.v_battery >= BATT_ABS_MAX) {
-        charging_paused = true;
-    }
-    return !charging_paused &&
-        status_message.v_charge < BATT_CHARGE_OVERVOLTAGE &&
-        status_message.charging_current < BATT_CHARGE_OVERCURRENT;
+    return true;
+    // if(charging_paused && status_message.v_battery < (BATT_ABS_MAX - BATT_TOPUP_RANGE)) {
+    //     charging_paused = false;
+    // }
+    // if(status_message.v_battery >= BATT_ABS_MAX) {
+    //     charging_paused = true;
+    // }
+    // return !charging_paused &&
+    //     status_message.v_charge < BATT_CHARGE_OVERVOLTAGE &&
+    //     status_message.charging_current < BATT_CHARGE_OVERCURRENT;
 }
 
 void updateChargingEnabled() {
