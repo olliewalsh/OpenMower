@@ -180,8 +180,13 @@ void updateEmergency() {
 
     mutex_enter_blocking(&mtx_rm24_inputs);
     stop_pressed |= rm24_stop_pressed;
-    num_lifted += rm24_bump0 ? 1 : 0;
-    num_lifted += rm24_bump1 ? 1 : 0;
+    bool rm24_bump_emergency_enabled =
+        HighLevelState::getMode(last_high_level_state.current_mode) == HighLevelState::Mode::AUTONOMOUS &&
+        HighLevelState::getSubMode(last_high_level_state.current_mode) == 0;
+    if (rm24_bump_emergency_enabled) {
+        num_lifted += rm24_bump0 ? 1 : 0;
+        num_lifted += rm24_bump1 ? 1 : 0;
+    }
     mutex_exit(&mtx_rm24_inputs);
 
     // Handle emergency "Stop" buttons
