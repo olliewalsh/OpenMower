@@ -182,9 +182,13 @@ void updateEmergency() {
         emergency_read |= LL_EMERGENCY_BIT_TILT;
     }
 
+    bool is_mowing = (last_high_level_state.current_mode & 0b111111) == HighLevelMode::MODE_AUTONOMOUS &&
+    ((last_high_level_state.current_mode >> 6) & 0b11) == 0;
     // Tilt emergency for bump sensors until obstacle detection implemented
     bool is_tilted = emergency1 || emergency2 || emergency3 || emergency4;
+    is_tilted = is_tilted && is_mowing;
     bool is_lifted = emergency3 && emergency4;
+    is_lifted = is_lifted && is_mowing;
     mutex_enter_blocking(&mtx_stop_pressed);
     bool local_stop_pressed = stop_pressed;
     mutex_exit(&mtx_stop_pressed);
@@ -733,7 +737,10 @@ void loop() {
 #ifdef SHUTDOWN_ESC_WHEN_IDLE
         // ESC power saving when mower is IDLE
         if(!ROS_running ||
-                (!emergency_latch && last_high_level_state.current_mode != HighLevelMode::MODE_IDLE) ||
+                (
+                    !emergency_latch &&
+                    (last_high_level_state.current_mode & 0b111111) != HighLevelMode::MODE_IDLE
+                ) ||
                 fabs(pitch_angle) > SHUTDOWN_ESC_MAX_PITCH
         ) {
             // Enable escs if not idle and not emergency, or if ROS is not running (for vesc-tool), or on a slope
@@ -750,7 +757,7 @@ void loop() {
         // If mowing use charge current ADC to determine adc offset
         if(
                 ROS_running &&
-                last_high_level_state.current_mode == HighLevelMode::MODE_AUTONOMOUS &&
+                (last_high_level_state.current_mode & 0b111111) == HighLevelMode::MODE_AUTONOMOUS &&
                 last_high_level_state.gps_quality != 0
             ) {
             adc_offset_samples[next_adc_offset_sample++] = (float)analogRead(PIN_ANALOG_CHARGE_VOLTAGE);
