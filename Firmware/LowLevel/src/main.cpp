@@ -38,9 +38,9 @@ using namespace soundSystem;
 #define UI_GET_VERSION_CYCLETIME 5000 // cycletime for UI Get_Version request (UI available check)
 #define UI_GET_VERSION_TIMEOUT 100    // timeout for UI Get_Version response (UI available check)
 
-#define TILT_EMERGENCY_ANGLE 30  // IMU tilt angle in any direction which counts as an emergency.
-#define TILT_EMERGENCY_MILLIS 250  // Time over the IMU tilt threshold before engaging the emergency.
-#define BUTTON_EMERGENCY_MILLIS 20 // Time for button emergency to activate. This is to debounce the button.
+#define TILT_EMERGENCY_ANGLE 40  // IMU tilt angle in any direction which counts as an emergency.
+#define TILT_EMERGENCY_MILLIS 500  // Time over the IMU tilt threshold before engaging the emergency.
+#define BUTTON_EMERGENCY_MILLIS 80 // Time for button emergency to activate. This is to debounce the button.
 
 #define PACKET_SERIAL Serial1
 SerialPIO uiSerial(PIN_UI_TX, PIN_UI_RX, 250);
