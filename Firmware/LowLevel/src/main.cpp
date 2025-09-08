@@ -33,10 +33,10 @@
 #define UI_GET_VERSION_CYCLETIME 5000 // cycletime for UI Get_Version request (UI available check)
 #define UI_GET_VERSION_TIMEOUT 100    // timeout for UI Get_Version response (UI available check)
 
-#define TILT_EMERGENCY_ANGLE 30 // Tile angle (in any direction) in order to count as emergency.
-#define TILT_EMERGENCY_MILLIS 250  // Time for tile angle to be over threshold in order to count as emergency.
+#define TILT_EMERGENCY_ANGLE 40 // Tile angle (in any direction) in order to count as emergency.
+#define TILT_EMERGENCY_MILLIS 500  // Time for tile angle to be over threshold in order to count as emergency.
 #define LIFT_EMERGENCY_MILLIS 800  // Time for both wheels to be lifted in order to count as emergency. This is to filter uneven ground.
-#define BUTTON_EMERGENCY_MILLIS 20 // Time for button emergency to activate. This is to debounce the button.
+#define BUTTON_EMERGENCY_MILLIS 80 // Time for button emergency to activate. This is to debounce the button.
 
 #define SHUTDOWN_ESC_MAX_PITCH 15.0 // Do not shutdown ESCs if absolute pitch angle is greater than this
 // Define to stream debugging messages via USB
@@ -102,6 +102,7 @@ unsigned long last_UILED_millis = 0;
 
 unsigned long lift_emergency_started = 0;
 unsigned long tilt_emergency_started = 0;
+unsigned long button_emergency_started = 0;
 
 unsigned long ui_get_version_next_millis = 0;     // Next cycle when to check for a UI version
 unsigned long ui_get_version_respond_timeout = 0; // When UI Get_Version response times out
@@ -223,8 +224,16 @@ void updateEmergency() {
             emergency_state |= 0b10000;
     }
     if (local_stop_pressed) {
-        emergency_state |= 0b00110;
+        if(button_emergency_started == 0) {
+            button_emergency_started = millis();
+        }
+        if((millis() - button_emergency_started) >= BUTTON_EMERGENCY_MILLIS) {
+            emergency_state |= 0b00110;
+        }
+    } else {
+        button_emergency_started = 0;
     }
+
     if (TILT_EMERGENCY_MILLIS > 0 && tilt_emergency_started > 0 && (millis() - tilt_emergency_started) >= TILT_EMERGENCY_MILLIS) {
         emergency_state |= (emergency_read & LL_EMERGENCY_BIT_TILT);
     }
